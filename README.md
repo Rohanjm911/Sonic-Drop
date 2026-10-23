@@ -38,6 +38,32 @@ It operates completely without Wi-Fi, Bluetooth, NFC, or cellular connectivity�
 
 ---
 
+## ⚡ Performance & Transfer Characteristics
+
+Acoustic communication propagates data entirely through **sound waves** in the near-ultrasonic spectrum (18.5 kHz – 20.5 kHz) using low-latency physical audio drivers. Because it operates within a tight ~2 kHz acoustic slice to maintain human inaudibility and withstand room reverberation, its throughput characteristics are optimized for **high-security credentials, cryptographic keys, and air-gapped text data**:
+
+### 📊 Physical Layer Throughput:
+* **Modulation Scheme**: Continuous-Phase Binary FSK (CP-FSK)
+* **Symbol Duration**: 10 ms per symbol (100 Baud)
+* **Raw Acoustic Speed**: ~100 bits/sec (~12.5 Bytes/sec)
+* **Net Effective Speed**: **~8 to 10 Bytes/sec** (after Preamble, Reed-Solomon (N,K) FEC, CRC-16, and ChaCha20-Poly1305 overhead)
+
+### ⏱️ Estimated Transfer Times by Payload Size:
+
+| Payload Type | Typical Size | Transfer Time | Practical Use Case |
+| :--- | :--- | :--- | :--- |
+| **X25519 Session Handshake + SAS** | ~32 – 64 B | **~4 – 6 Seconds** | ✅ Seamless mutual verification |
+| **OTP / Passwords / 2FA Tokens** | 6 – 16 B | **~2 – 3 Seconds** | ✅ Instant air-gapped MFA |
+| **Crypto Wallet Seed / Private Key** | 32 – 128 B | **~8 – 15 Seconds** | ✅ Cold storage wallet recovery |
+| **Encrypted Short Text / Notes** | 250 – 500 B | **~30 – 60 Seconds** | ✅ Zero-network secret memos |
+| **Small File / Contact Card** | 1 KB – 2 KB | **~1.5 – 3.5 Minutes** | ✅ Offline transfer |
+| **Large Files / Media (MBs)** | > 100 KB | **Hours (Impractical)**| ❌ *Use RF protocols (Wi-Fi Direct)* |
+
+> [!NOTE]  
+> Sonic-Drop is purposely engineered for **military-grade air-gapped security, classified credential transfer, and zero-RF device pairing** where total radio silence (No Wi-Fi, No Bluetooth, No Cellular) is required. Large multimedia files (MBs) are not suited for ultrasonic sound-wave transmission due to acoustic physical limits.
+
+---
+
 ## 🏗️ Architecture
 
 ```
