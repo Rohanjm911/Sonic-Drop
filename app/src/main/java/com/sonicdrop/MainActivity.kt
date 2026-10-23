@@ -9,6 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.sonicdrop.theme.SonicDropTheme
+import com.sonicdrop.ui.main.SonicDropApp
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -16,7 +17,9 @@ class MainActivity : ComponentActivity() {
 
     enableEdgeToEdge()
     setContent {
-      SonicDropTheme { Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { MainNavigation() } }
+      SonicDropTheme {
+        SonicDropApp()
+      }
     }
   }
 }
