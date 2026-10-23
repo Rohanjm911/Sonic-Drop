@@ -109,7 +109,21 @@ SONIC-DROP/
 │   └── build.gradle.kts
 ├── docs/
 │   └── assets/                           # Logo and architectural diagrams
+├── SonicDrop-debug.apk                   # Pre-compiled ready-to-install Android APK
 └── README.md
+```
+
+---
+
+## 📲 Direct APK Download & Installation
+
+You can directly download and install the pre-compiled APK from the root of this repository:
+
+📥 **[Download SonicDrop-debug.apk (Direct Link)](SonicDrop-debug.apk)**
+
+Or install directly onto a connected physical Android device via ADB:
+```bash
+adb install -r SonicDrop-debug.apk
 ```
 
 ---
@@ -123,7 +137,7 @@ SONIC-DROP/
 - **Target SDK**: Android 14 (API 34)
 - **Minimum SDK**: Android 8.0 (API 26)
 
-### Build & Run
+### Build from Source
 1. Clone the repository:
    ```bash
    git clone https://github.com/Rohanjm911/Sonic-Drop.git
@@ -131,7 +145,11 @@ SONIC-DROP/
    ```
 2. Open the project in Android Studio.
 3. Allow Gradle to sync and download necessary NDK/CMake components.
-4. Run the app on an Android device or emulator with microphone permissions granted.
+4. Run the app or build the APK using:
+   ```bash
+   ./gradlew assembleDebug
+   ```
+   The built APK will be located at `app/build/outputs/apk/debug/app-debug.apk` and root `SonicDrop-debug.apk`.
 
 ---
 
