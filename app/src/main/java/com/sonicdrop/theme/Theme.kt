@@ -1,52 +1,54 @@
 package com.sonicdrop.theme
 
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val DarkColorScheme = darkColorScheme(
-    primary = ElectricBlue,
+val DarkColorScheme = darkColorScheme(
+    primary = DarkPrimaryAccent,
     onPrimary = Color.White,
-    primaryContainer = ElectricBlueDark,
-    onPrimaryContainer = Color.White,
-    secondary = SonicOrange,
-    onSecondary = Color.White,
-    tertiary = SonicRed,
+    primaryContainer = DarkBackgroundSecondary,
+    onPrimaryContainer = DarkPrimaryText,
+    secondary = DarkWarning,
+    onSecondary = Color.Black,
+    tertiary = DarkSuccess,
     onTertiary = Color.White,
-    background = CharcoalBackground,
-    onBackground = TextPrimary,
-    surface = CharcoalSurface,
-    onSurface = TextPrimary,
-    surfaceVariant = CharcoalSurfaceVariant,
-    onSurfaceVariant = TextSecondary,
-    outline = CharcoalBorder
+    error = DarkError,
+    onError = Color.White,
+    background = DarkBackground,
+    onBackground = DarkPrimaryText,
+    surface = DarkCardBackground,
+    onSurface = DarkPrimaryText,
+    surfaceVariant = DarkBackgroundSecondary,
+    onSurfaceVariant = DarkSecondaryText,
+    outline = DarkBorders
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = ElectricBlue,
+val LightColorScheme = lightColorScheme(
+    primary = LightPrimaryAccent,
     onPrimary = Color.White,
-    primaryContainer = ElectricBlueLight,
-    onPrimaryContainer = Color.White,
-    secondary = SonicOrange,
+    primaryContainer = LightBackgroundSecondary,
+    onPrimaryContainer = LightPrimaryText,
+    secondary = LightWarning,
     onSecondary = Color.White,
-    tertiary = SonicRed,
+    tertiary = LightSuccess,
     onTertiary = Color.White,
+    error = LightError,
+    onError = Color.White,
     background = LightBackground,
-    onBackground = LightTextPrimary,
-    surface = LightSurface,
-    onSurface = LightTextPrimary,
-    surfaceVariant = LightSurfaceVariant,
-    onSurfaceVariant = LightTextSecondary,
-    outline = LightBorder
+    onBackground = LightPrimaryText,
+    surface = LightCardBackground,
+    onSurface = LightPrimaryText,
+    surfaceVariant = LightBackgroundSecondary,
+    onSurfaceVariant = LightSecondaryText,
+    outline = LightBorders
 )
 
 @Composable
 fun SonicDropTheme(
-    darkTheme: Boolean = true, // Default to sleek dark theme as specified
+    darkTheme: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme

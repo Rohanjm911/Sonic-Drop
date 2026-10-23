@@ -57,7 +57,8 @@ sealed class TransferPhase {
  */
 class TransferManager(
     private val context: Context,
-    val audioController: AudioController
+    val audioController: AudioController,
+    val historyRepository: com.sonicdrop.data.HistoryRepository = com.sonicdrop.data.HistoryRepository(context)
 ) {
     private val scope = CoroutineScope(Dispatchers.Default)
     private var transferJob: Job? = null
@@ -222,6 +223,19 @@ class TransferManager(
                 val finAudio = NativeDspBridge.modulateRawBytes(finWire)
                 audioController.playAudio(finAudio)
 
+                val duration = maxOf(0.1f, (System.currentTimeMillis() - startTime) / 1000.0f)
+                historyRepository.addRecord(
+                    com.sonicdrop.data.TransferRecord(
+                        id = "tx_${System.currentTimeMillis()}",
+                        fileName = fileName,
+                        fileSize = fileSize,
+                        timestamp = System.currentTimeMillis(),
+                        isSender = true,
+                        durationSeconds = duration,
+                        isSuccess = true
+                    )
+                )
+
                 _phase.value = TransferPhase.Success(fileName, fileSize, null)
             } catch (e: Exception) {
                 _phase.value = TransferPhase.Failed(e.message ?: "Transfer encountered an error")
@@ -349,6 +363,20 @@ class TransferManager(
                 // Save to downloads directory
                 val targetFile = File(context.getExternalFilesDir(null), fileName)
                 FileOutputStream(targetFile).use { it.write(reconstructedBytes) }
+
+                val duration = maxOf(0.1f, (System.currentTimeMillis() - startTime) / 1000.0f)
+                historyRepository.addRecord(
+                    com.sonicdrop.data.TransferRecord(
+                        id = "rx_${System.currentTimeMillis()}",
+                        fileName = fileName,
+                        fileSize = reconstructedBytes.size.toLong(),
+                        timestamp = System.currentTimeMillis(),
+                        isSender = false,
+                        durationSeconds = duration,
+                        isSuccess = true,
+                        filePath = targetFile.absolutePath
+                    )
+                )
 
                 _phase.value = TransferPhase.Success(fileName, reconstructedBytes.size.toLong(), targetFile.absolutePath)
             } catch (e: Exception) {
