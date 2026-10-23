@@ -163,26 +163,36 @@ fun HeaderSection(isListening: Boolean, snrDb: Float) {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+        Surface(
+            color = if (isListening) SonicGreen.copy(alpha = 0.15f) else ElectricBlue.copy(alpha = 0.15f),
+            shape = RoundedCornerShape(20.dp),
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                if (isListening) SonicGreen.copy(alpha = 0.6f) else ElectricBlueLight.copy(alpha = 0.6f)
+            )
         ) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .background(
-                        if (isListening) SonicGreen else TextMuted,
-                        CircleShape
-                    )
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = if (isListening) "ULTRASONIC RX LIVE (18-20 kHz)" else "ACOUSTIC ENGINE READY",
-                color = if (isListening) SonicGreen else TextSecondary,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 1.sp
-            )
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(
+                            if (isListening) SonicGreen else ElectricBlueLight,
+                            CircleShape
+                        )
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (isListening) "ULTRASONIC RX LIVE (18-20 kHz)" else "ACOUSTIC ENGINE READY",
+                    color = if (isListening) SonicGreen else ElectricBlueLight,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+            }
         }
     }
 }
