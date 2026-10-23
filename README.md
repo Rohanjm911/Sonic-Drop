@@ -11,6 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Platform" />
   <img src="https://img.shields.io/badge/Language-Kotlin%20%7C%20C%2B%2B20-blue.svg" alt="Languages" />
+  <img src="https://img.shields.io/badge/Security-X25519%20%2B%20ChaCha20--Poly1305-red.svg" alt="Security" />
   <img src="https://img.shields.io/badge/DSP-Continuous--Phase%20BFSK-orange.svg" alt="Modulation" />
   <img src="https://img.shields.io/badge/FEC-Reed--Solomon%20%2B%20CRC16-purple.svg" alt="FEC" />
   <img src="https://img.shields.io/badge/License-MIT-lightgrey.svg" alt="License" />
@@ -18,29 +19,68 @@
 
 ---
 
-## 📌 Overview
+## 📌 Executive Summary
 
-**Sonic-Drop** is an offline, air-gapped data transfer engine that communicates device-to-device entirely over acoustic sound waves in the near-ultrasonic frequency band (18 kHz - 20 kHz). 
+**Sonic-Drop** is an offline, air-gapped data transfer engine that facilitates device-to-device communication entirely through near-ultrasonic acoustic sound waves (17.5 kHz – 20.5 kHz). 
 
-It operates completely without Wi-Fi, Bluetooth, NFC, or cellular connectivity—making it completely impervious to radio frequency jamming and isolated from IP networks.
+It operates completely isolated from Wi-Fi, Bluetooth, NFC, or cellular networks. By relying solely on physical acoustic transducers (speaker and microphone), Sonic-Drop is immune to RF eavesdropping, electromagnetic spectrum sniffing, and network-level packet sniffing.
 
 ---
 
-## ✨ Features
+## 🛡️ Cryptographic & Security Architecture
 
-- 📶 **Zero RF / Zero Network**: Completely offline. Transmits data using speaker audio output and microphone recording.
-- ⚡ **High-Performance C++20 DSP Core**: Tone synthesis, phase accumulator, matched filtering, and spectral energy analysis compiled to native machine code via Android NDK.
-- 🎶 **Continuous-Phase Binary FSK (CP-FSK)**: Clean tone transitions without phase discontinuities to eliminate audible clicks and maximize spectral efficiency.
-- 🛡️ **Reed-Solomon FEC + CRC16**: Automatic burst error correction over noisy acoustic channels with strict frame checksum verification.
-- 🎯 **Dual-Tone Preamble Detection**: Robust sliding Goertzel filter for frame synchronization and accurate start-of-packet alignment.
-- 📊 **Real-time Spectral Diagnostics**: Integrated KissFFT engine for FFT magnitude analysis and SNR (Signal-to-Noise Ratio) estimation.
-- 📱 **Clean Kotlin Architecture**: Idiomatic Kotlin JNI bindings (`NativeDspBridge`) with structured asynchronous audio pipeline.
+Sonic-Drop implements an end-to-end authenticated, forward-secret cryptographic envelope designed to withstand Man-in-the-Middle (MITM) and replay attacks:
+
+```
+[ Sender Device ]                                      [ Receiver Device ]
+       │                                                       │
+       ├────────── 1. Ephemeral X25519 PubKey (SYN) ──────────>│
+       │                                                       │
+       │<─────── 2. Ephemeral X25519 PubKey (SYN_ACK) ────────┤
+       │                                                       │
+[ Compute Shared Secret ]                              [ Compute Shared Secret ]
+[ HKDF-SHA256 Session Key ]                            [ HKDF-SHA256 Session Key ]
+       │                                                       │
+       ├─────────── 3. Short Authentication String ────────────┤
+       │                    (6-Digit SAS Code)                 │
+       │              [ Visual Comparison by Users ]           │
+       ▼                                                       ▼
+[ Encrypt Payload with ChaCha20-Poly1305 ]             [ Decrypt & Authenticate Tag ]
+[ Unique 12-byte Directional Nonce ]                   [ Enforce Sequence Ordering ]
+[ Transmit Reed-Solomon + CRC16 Frame ]                [ Validate CRC & RS Correction ]
+```
+
+1. **Ephemeral Key Agreement (X25519 / ECDH)**: Every session generates fresh, ephemeral cryptographic key pairs. Private keys never leave memory or touch the physical channel.
+2. **Key Derivation (HKDF-SHA256)**: RFC 5869 extract-and-expand ensures high-entropy 256-bit symmetric session keys bound to session context.
+3. **Short Authentication String (SAS)**: Mitigates acoustic Man-in-the-Middle attacks. Both devices deterministically compute and display an identical 6-digit verification code for mutual confirmation before encrypted data flows.
+4. **AEAD Encryption (ChaCha20-Poly1305)**: Every packet payload is encrypted and authenticated. 
+5. **Replay & Injection Protection**: Unique 12-byte deterministic nonces bound to session ID, monotonic sequence numbers, and directional indicators.
+
+---
+
+## 🎛️ Acoustic DSP & Modulation Engine
+
+The physical transmission layer is written in modern **C++20** and compiled via Android NDK for deterministic low-latency execution:
+
+```
+  Frequency (Hz)
+    20.5 kHz ──── Preamble Sync Tone 2 / Mark Tone (High)
+    19.5 kHz ──── Space Frequency (Binary 0)
+    18.5 kHz ──── Mark Frequency (Binary 1)
+    17.5 kHz ──── Preamble Start Tone 1
+```
+
+* **Continuous-Phase Binary FSK (CP-FSK)**: Smooth phase transitions across bit boundaries eliminate acoustic splatter and audible clicks.
+* **Goertzel Spectral Filtering**: Ultra-lightweight single-bin discrete Fourier transform filter banks detect preambles and decode symbols in real time without CPU-heavy whole-spectrum FFT overhead.
+* **Sliding Preamble Detection**: 4-stage alternating sync sequence (`[F1, F2, F1, F2]`) provides robust packet boundary alignment even in presence of room echoes.
+* **KissFFT Diagnostics**: Provides real-time Fast Fourier Transform spectral analysis and SNR (Signal-to-Noise Ratio) measurement.
+* **Reed-Solomon FEC (N, K)**: Operates over Galois Field $GF(2^8)$ to correct up to 4 corrupted symbol bytes per packet frame.
 
 ---
 
 ## ⚡ Performance & Transfer Characteristics
 
-Acoustic communication propagates data entirely through **sound waves** in the near-ultrasonic spectrum (18.5 kHz – 20.5 kHz) using low-latency physical audio drivers. Because it operates within a tight ~2 kHz acoustic slice to maintain human inaudibility and withstand room reverberation, its throughput characteristics are optimized for **high-security credentials, cryptographic keys, and air-gapped text data**:
+Acoustic communication propagates data entirely through **sound waves** in the near-ultrasonic spectrum (18.5 kHz – 20.5 kHz). Because it operates within a tight ~2 kHz acoustic slice to maintain human inaudibility and withstand room reverberation, its throughput characteristics are optimized for **high-security credentials, cryptographic keys, and air-gapped text data**:
 
 ### 📊 Physical Layer Throughput:
 * **Modulation Scheme**: Continuous-Phase Binary FSK (CP-FSK)
@@ -64,10 +104,31 @@ Acoustic communication propagates data entirely through **sound waves** in the n
 
 ---
 
-## 🏗️ Architecture
+## 📱 Environmental & Physical Device Guidelines
+
+To ensure seamless, error-free ultrasonic communication between two physical Android devices:
+
+1. **Optimal Distance**: Keep devices between **5 cm to 50 cm** apart (e.g., resting next to each other on a table).
+2. **Speaker Volume**: Set media volume on the transmitting device to **70% – 90%**. Extremely low volume prevents microphone detection, while 100% can cause hardware harmonic distortion.
+3. **Microphone Placement**: Ensure the receiver's bottom microphone is not obstructed by hands or thick cases.
+4. **Sample Rate**: The app automatically negotiates **48,000 Hz (48 kHz)** mono float PCM, supported natively across modern Android devices.
+
+---
+
+## 🏗️ End-to-End System Architecture
 
 ```
-               [ User Data / Payload ]
+               [ User Data / File ]
+                         │
+                         ▼
+        ┌──────────────────────────────────┐
+        │   Storage Access Framework / SAF │
+        └──────────────────────────────────┘
+                         │
+                         ▼
+        ┌──────────────────────────────────┐
+        │    X25519 + ChaCha20-Poly1305    │  (AEAD Encryption & Unique Nonces)
+        └──────────────────────────────────┘
                          │
                          ▼
         ┌──────────────────────────────────┐
@@ -81,7 +142,7 @@ Acoustic communication propagates data entirely through **sound waves** in the n
                          │
                          ▼
         ┌──────────────────────────────────┐
-        │     CP-FSK Native Modulator      │  (18 kHz Mark / 19 kHz Space)
+        │     CP-FSK Native Modulator      │  (18.5 kHz Mark / 19.5 kHz Space)
         └──────────────────────────────────┘
                          │
                          ▼
@@ -110,7 +171,12 @@ Acoustic communication propagates data entirely through **sound waves** in the n
         └──────────────────────────────────┘
                          │
                          ▼
-             [ Verified Output Data ]
+        ┌──────────────────────────────────┐
+        │     ChaCha20-Poly1305 Decrypt    │  (Authenticated Payload Decryption)
+        └──────────────────────────────────┘
+                         │
+                         ▼
+             [ Verified Output File ]
 ```
 
 ---
@@ -121,17 +187,23 @@ Acoustic communication propagates data entirely through **sound waves** in the n
 SONIC-DROP/
 ├── app/
 │   ├── src/
-│   │   └── main/
-│   │       ├── cpp/                      # Native C++ DSP Core
-│   │       │   ├── dsp/                  # FSK Modulator, Demodulator, Audio Buffer, Preamble Detector
-│   │       │   ├── fec/                  # Reed-Solomon Codec
-│   │       │   ├── protocol/             # Packet serialization & CRC16
-│   │       │   ├── third_party/kissfft/  # KissFFT spectral analysis library
-│   │       │   ├── CMakeLists.txt        # Native build config
-│   │       │   └── native-lib.cpp        # JNI Export interfaces
-│   │       └── java/com/sonicdrop/
-│   │           ├── audio/                # NativeDspBridge Kotlin JNI wrapper
-│   │           └── protocol/             # Packet models & enums
+│   │   ├── main/
+│   │   │   ├── cpp/                      # Native C++ DSP Core
+│   │   │   │   ├── dsp/                  # FSK Modulator, Demodulator, Audio Buffer, Preamble Detector
+│   │   │   │   ├── fec/                  # Reed-Solomon Codec GF(2^8)
+│   │   │   │   ├── protocol/             # Packet serialization & CRC16
+│   │   │   │   ├── third_party/kissfft/  # KissFFT spectral analysis library
+│   │   │   │   ├── CMakeLists.txt        # Native build config
+│   │   │   │   └── native-lib.cpp        # JNI Export interfaces
+│   │   │   ├── java/com/sonicdrop/
+│   │   │   │   ├── audio/                # NativeDspBridge & AudioController (AudioTrack/Record)
+│   │   │   │   ├── protocol/             # Binary Packet Models & Enums
+│   │   │   │   ├── security/             # X25519, HKDF-SHA256, ChaCha20-Poly1305, SAS
+│   │   │   │   ├── transfer/             # TransferManager & State Machine
+│   │   │   │   ├── theme/                # Minimal Charcoal & Electric Blue Design Tokens
+│   │   │   │   └── ui/main/              # SonicDropApp Jetpack Compose UI
+│   │   │   └── res/                      # Adaptive Launcher Icons & Resources
+│   │   └── test/                         # Unit tests (SonicCryptoTest, etc.)
 │   └── build.gradle.kts
 ├── docs/
 │   └── assets/                           # Logo and architectural diagrams
@@ -171,7 +243,11 @@ adb install -r SonicDrop-debug.apk
    ```
 2. Open the project in Android Studio.
 3. Allow Gradle to sync and download necessary NDK/CMake components.
-4. Run the app or build the APK using:
+4. Run unit tests:
+   ```bash
+   ./gradlew testDebugUnitTest
+   ```
+5. Build the debug APK:
    ```bash
    ./gradlew assembleDebug
    ```
