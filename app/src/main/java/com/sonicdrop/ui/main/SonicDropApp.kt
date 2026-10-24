@@ -120,9 +120,7 @@ fun SonicDropApp() {
     }
 }
 
-// -----------------------------------------------------------------------------
-// BOTTOM NAVIGATION (Clean, Solid Colors, No Gradients)
-// -----------------------------------------------------------------------------
+// Bottom Navigation
 @Composable
 fun SonicBottomNavigation(
     currentTab: AppTab,
@@ -193,9 +191,7 @@ fun NavItem(
     }
 }
 
-// -----------------------------------------------------------------------------
-// 1. HOME SCREEN (Master Prompt Section 7)
-// -----------------------------------------------------------------------------
+// Home Screen
 @Composable
 fun HomeScreen(
     transferManager: TransferManager,
@@ -447,9 +443,7 @@ fun AudioReadinessCard(
     }
 }
 
-// -----------------------------------------------------------------------------
-// 2. ACTIVE TRANSFER WORKFLOW VIEW (Sections 9, 10, 11, 12)
-// -----------------------------------------------------------------------------
+// Active Transfer Workflow View
 @Composable
 fun TransferWorkflowView(
     transferManager: TransferManager,
@@ -831,9 +825,7 @@ fun CompletionFailedScreen(
     }
 }
 
-// -----------------------------------------------------------------------------
-// 3. HISTORY SCREEN (Master Prompt Section 13)
-// -----------------------------------------------------------------------------
+// History Screen
 @Composable
 fun HistoryScreen(historyRepository: HistoryRepository) {
     val history by historyRepository.records.collectAsStateWithLifecycle()
@@ -986,9 +978,7 @@ fun HistoryRowItem(record: TransferRecord) {
     }
 }
 
-// -----------------------------------------------------------------------------
-// 4. SETTINGS SCREEN (Master Prompt Section 14)
-// -----------------------------------------------------------------------------
+// Settings Screen
 @Composable
 fun SettingsScreen(
     settingsRepository: SettingsRepository,
