@@ -1,5 +1,7 @@
 #include "dsp/fsk_demodulator.h"
+#include "protocol/packet_codec.h"
 #include <cmath>
+#include <cstring>
 #include <algorithm>
 
 namespace sonicdrop {
@@ -41,9 +43,10 @@ DemodulationResult FskDemodulator::processBuffer(AudioRingBuffer& ringBuffer, si
     size_t available = ringBuffer.available();
     int symbolSamples = config_.getSamplesPerSymbol();
     int preambleTotalSamples = config_.getSamplesPerPreambleTone() * 4;
-    size_t requiredSamples = preambleTotalSamples + (expectedPacketBytes * 8 * symbolSamples);
+    size_t headerBytes = sizeof(protocol::PacketHeader);
+    size_t minRequiredSamples = preambleTotalSamples + (headerBytes * 8 * symbolSamples);
 
-    if (available < requiredSamples) {
+    if (available < minRequiredSamples) {
         return result; // Need more audio data
     }
 
@@ -52,7 +55,7 @@ DemodulationResult FskDemodulator::processBuffer(AudioRingBuffer& ringBuffer, si
     ringBuffer.peek(lookahead.data(), available, 0);
 
     float confidence = 0.0f;
-    int dataStartOffset = preambleDetector_.detectPreamble(lookahead.data(), available, 2.0f, &confidence);
+    int dataStartOffset = preambleDetector_.detectPreamble(lookahead.data(), available, 1.25f, &confidence);
 
     if (dataStartOffset < 0) {
         // No preamble detected in the first chunk, advance by 1 symbol to slide the window
@@ -60,21 +63,70 @@ DemodulationResult FskDemodulator::processBuffer(AudioRingBuffer& ringBuffer, si
         return result;
     }
 
-    // Check if we have enough samples after the preamble to decode the full expected packet
-    size_t dataSamplesNeeded = expectedPacketBytes * 8 * symbolSamples;
-    if (lookahead.size() < static_cast<size_t>(dataStartOffset) + dataSamplesNeeded) {
-        // Preamble detected, but tail of packet not yet arrived. Wait for subsequent audio frames.
+    // Check if we have enough samples after preamble to decode the 12-byte header
+    size_t headerSamplesNeeded = headerBytes * 8 * symbolSamples;
+    if (lookahead.size() < static_cast<size_t>(dataStartOffset) + headerSamplesNeeded) {
+        // Preamble detected, but header not yet arrived. Wait for subsequent audio frames.
         return result;
     }
 
-    // Demodulate the data bits
+    // Demodulate header to determine exact packet length dynamically
     const float* dataPtr = lookahead.data() + dataStartOffset;
-    result.rawPacketBytes.reserve(expectedPacketBytes);
-
+    uint8_t headerBuf[sizeof(protocol::PacketHeader)];
     int bitIndex = 0;
     uint8_t currentByte = 0;
+    size_t byteCount = 0;
 
-    for (size_t i = 0; i < expectedPacketBytes * 8; ++i) {
+    for (size_t i = 0; i < headerBytes * 8; ++i) {
+        const float* symbolPtr = dataPtr + (i * symbolSamples);
+        float markPower = markFilter_.computePower(symbolPtr, symbolSamples);
+        float spacePower = spaceFilter_.computePower(symbolPtr, symbolSamples);
+
+        bool bit = (markPower >= spacePower);
+        currentByte = (currentByte << 1) | (bit ? 1 : 0);
+        bitIndex++;
+
+        if (bitIndex == 8) {
+            headerBuf[byteCount++] = currentByte;
+            currentByte = 0;
+            bitIndex = 0;
+        }
+    }
+
+    size_t actualPacketBytes = 0;
+    // Check magic signature 'S', 'D' (0x53, 0x44) and version 0x01
+    if (headerBuf[0] == 0x53 && headerBuf[1] == 0x44 && headerBuf[2] == 0x01) {
+        protocol::PacketHeader hdr;
+        std::memcpy(&hdr, headerBuf, sizeof(hdr));
+        if (hdr.payloadLen <= protocol::MAX_PAYLOAD_SIZE) {
+            actualPacketBytes = sizeof(protocol::PacketHeader) + hdr.payloadLen + protocol::CRC16_SIZE + protocol::FEC_PARITY_BYTES;
+        }
+    }
+
+    // Fallback if expectedPacketBytes was explicitly specified (and not default/oversized 150)
+    if (actualPacketBytes == 0 && expectedPacketBytes > 0 && expectedPacketBytes != 150) {
+        actualPacketBytes = expectedPacketBytes;
+    }
+
+    if (actualPacketBytes == 0) {
+        // False preamble or severely corrupted header; advance past false preamble
+        ringBuffer.advance(symbolSamples);
+        return result;
+    }
+
+    // Check if entire packet has arrived
+    size_t totalDataSamplesNeeded = actualPacketBytes * 8 * symbolSamples;
+    if (lookahead.size() < static_cast<size_t>(dataStartOffset) + totalDataSamplesNeeded) {
+        // Wait for remaining packet data to arrive
+        return result;
+    }
+
+    // Demodulate all actualPacketBytes
+    result.rawPacketBytes.reserve(actualPacketBytes);
+    bitIndex = 0;
+    currentByte = 0;
+
+    for (size_t i = 0; i < actualPacketBytes * 8; ++i) {
         const float* symbolPtr = dataPtr + (i * symbolSamples);
         float markPower = markFilter_.computePower(symbolPtr, symbolSamples);
         float spacePower = spaceFilter_.computePower(symbolPtr, symbolSamples);
@@ -92,7 +144,7 @@ DemodulationResult FskDemodulator::processBuffer(AudioRingBuffer& ringBuffer, si
 
     result.success = true;
     result.detectedSnrDb = 10.0f * std::log10(std::max(1.0f, confidence));
-    result.consumedSamples = dataStartOffset + static_cast<int>(dataSamplesNeeded);
+    result.consumedSamples = dataStartOffset + static_cast<int>(totalDataSamplesNeeded);
 
     // Consume the decoded packet samples from the ring buffer
     ringBuffer.advance(result.consumedSamples);

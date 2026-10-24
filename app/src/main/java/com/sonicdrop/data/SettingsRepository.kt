@@ -22,10 +22,10 @@ class SettingsRepository(context: Context) {
     )
     val themeMode: StateFlow<AppThemeMode> = _themeMode.asStateFlow()
 
-    private val _markFreq = MutableStateFlow(prefs.getFloat("mark_freq", 18500.0f))
+    private val _markFreq = MutableStateFlow(prefs.getFloat("mark_freq", 18600.0f))
     val markFreq: StateFlow<Float> = _markFreq.asStateFlow()
 
-    private val _spaceFreq = MutableStateFlow(prefs.getFloat("space_freq", 19500.0f))
+    private val _spaceFreq = MutableStateFlow(prefs.getFloat("space_freq", 19200.0f))
     val spaceFreq: StateFlow<Float> = _spaceFreq.asStateFlow()
 
     fun setThemeMode(mode: AppThemeMode) {

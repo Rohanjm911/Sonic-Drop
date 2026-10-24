@@ -102,11 +102,11 @@ int PreambleDetector::detectPreamble(const float* samples, size_t sampleCount, f
 
         float ratio = signalSum / crossSum;
 
-        // Verify all 4 stages showed dominance
-        bool stagesMatch = (p1_f1 > p1_f2 * 1.8f) &&
-                           (p2_f2 > p2_f1 * 1.8f) &&
-                           (p3_f1 > p3_f2 * 1.8f) &&
-                           (p4_f2 > p4_f1 * 1.8f);
+        // Verify all 4 stages showed dominance with tolerance for acoustic mic roll-off
+        bool stagesMatch = (p1_f1 > p1_f2 * 1.3f) &&
+                           (p2_f2 > p2_f1 * 1.3f) &&
+                           (p3_f1 > p3_f2 * 1.3f) &&
+                           (p4_f2 > p4_f1 * 1.3f);
 
         if (stagesMatch && ratio > minConfidenceRatio && ratio > bestConfidence) {
             bestConfidence = ratio;

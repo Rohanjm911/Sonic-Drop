@@ -61,7 +61,13 @@ class AudioController(private val context: Context) {
     suspend fun playAudio(waveform: FloatArray) = withContext(Dispatchers.IO) {
         if (waveform.isEmpty()) return@withContext
 
-        val bufferSize = waveform.size * 4
+        val minTrackBuffer = AudioTrack.getMinBufferSize(
+            SAMPLE_RATE,
+            CHANNEL_CONFIG_OUT,
+            AUDIO_FORMAT
+        )
+        val bufferSize = maxOf(minTrackBuffer, waveform.size * 4)
+
         val audioTrack = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -81,12 +87,13 @@ class AudioController(private val context: Context) {
             .build()
 
         try {
+            audioTrack.setVolume(AudioTrack.getMaxVolume())
             audioTrack.write(waveform, 0, waveform.size, AudioTrack.WRITE_BLOCKING)
             audioTrack.play()
 
             // Wait until playback completes
             val durationMs = (waveform.size * 1000L) / SAMPLE_RATE
-            kotlinx.coroutines.delay(durationMs + 50)
+            kotlinx.coroutines.delay(durationMs + 60)
         } finally {
             try {
                 audioTrack.stop()
@@ -99,6 +106,8 @@ class AudioController(private val context: Context) {
 
     /**
      * Starts background microphone capture loop feeding into NativeDspBridge ring buffer.
+     * Uses UNPROCESSED / VOICE_RECOGNITION to disable speech noise cancellation that
+     * suppresses ultrasonic sound waves.
      */
     @SuppressLint("MissingPermission")
     fun startListening(): Boolean {
@@ -112,25 +121,45 @@ class AudioController(private val context: Context) {
         )
         val bufferSize = maxOf(minBufferSize, 2048 * 4)
 
-        val audioRecord: AudioRecord
-        try {
-            audioRecord = AudioRecord.Builder()
-                .setAudioSource(MediaRecorder.AudioSource.MIC)
-                .setAudioFormat(
-                    AudioFormat.Builder()
-                        .setEncoding(AUDIO_FORMAT)
-                        .setSampleRate(SAMPLE_RATE)
-                        .setChannelMask(CHANNEL_CONFIG_IN)
-                        .build()
-                )
-                .setBufferSizeInBytes(bufferSize)
-                .build()
-        } catch (e: Exception) {
-            _hardwareSupported.value = false
-            return false
+        val sourcesToTry = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+            intArrayOf(
+                MediaRecorder.AudioSource.UNPROCESSED,
+                MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                MediaRecorder.AudioSource.MIC
+            )
+        } else {
+            intArrayOf(
+                MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                MediaRecorder.AudioSource.MIC
+            )
         }
 
-        if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
+        var audioRecord: AudioRecord? = null
+        for (source in sourcesToTry) {
+            try {
+                val rec = AudioRecord.Builder()
+                    .setAudioSource(source)
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(AUDIO_FORMAT)
+                            .setSampleRate(SAMPLE_RATE)
+                            .setChannelMask(CHANNEL_CONFIG_IN)
+                            .build()
+                    )
+                    .setBufferSizeInBytes(bufferSize)
+                    .build()
+                if (rec.state == AudioRecord.STATE_INITIALIZED) {
+                    audioRecord = rec
+                    break
+                } else {
+                    rec.release()
+                }
+            } catch (e: Exception) {
+                // Try fallback source
+            }
+        }
+
+        if (audioRecord == null || audioRecord.state != AudioRecord.STATE_INITIALIZED) {
             _hardwareSupported.value = false
             return false
         }
@@ -150,11 +179,11 @@ class AudioController(private val context: Context) {
                     if (read > 0) {
                         NativeDspBridge.pushAudioSamples(readBuffer, read)
 
-                        // Measure SNR periodically
+                        // Measure SNR periodically around 18.6 kHz
                         snrMeasureCounter++
                         if (snrMeasureCounter >= 10) {
                             snrMeasureCounter = 0
-                            val snr = NativeDspBridge.measureSnr(readBuffer, 18500.0f)
+                            val snr = NativeDspBridge.measureSnr(readBuffer, 18600.0f)
                             _currentSnr.value = maxOf(0.0f, snr)
                         }
                     }

@@ -23,17 +23,17 @@ object SonicCrypto {
     private val secureRandom = SecureRandom()
 
     /**
-     * Generates an ephemeral cryptographic KeyPair.
+     * Generates an ephemeral cryptographic KeyPair using NIST P-256 (EC)
+     * supported natively across 100% of Android versions for universal interoperability.
      */
     fun generateEphemeralKeyPair(): KeyPair {
         return try {
-            val kpg = KeyPairGenerator.getInstance("XDH")
-            kpg.initialize(255)
-            kpg.generateKeyPair()
-        } catch (e: Exception) {
-            // Fallback standard NIST P-256 (supported on all Android versions)
             val kpg = KeyPairGenerator.getInstance("EC")
             kpg.initialize(256)
+            kpg.generateKeyPair()
+        } catch (e: Exception) {
+            val kpg = KeyPairGenerator.getInstance("XDH")
+            kpg.initialize(255)
             kpg.generateKeyPair()
         }
     }

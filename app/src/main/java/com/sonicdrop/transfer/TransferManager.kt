@@ -104,6 +104,12 @@ class TransferManager(
         _role.value = TransferRole.Sender
         _phase.value = TransferPhase.KeyExchange
 
+        val ok = audioController.startListening()
+        if (!ok) {
+            _phase.value = TransferPhase.Failed("Cannot access microphone. Please ensure microphone permission is granted.")
+            return
+        }
+
         transferJob = scope.launch(Dispatchers.IO) {
             try {
                 // 1. Resolve file metadata
@@ -111,7 +117,7 @@ class TransferManager(
                 val fileBytes = context.contentResolver.openInputStream(fileUri)?.use { it.readBytes() }
                     ?: throw IllegalStateException("Cannot read selected file")
 
-                // 2. Generate Ephemeral Keys
+                // 2. Generate Ephemeral Keys (NIST P-256 for universal compatibility)
                 localKeyPair = SonicCrypto.generateEphemeralKeyPair()
                 sessionId = Random.nextInt(100000, 999999)
                 val localPubBytes = localKeyPair!!.public.encoded
@@ -126,18 +132,22 @@ class TransferManager(
                 val synAudio = NativeDspBridge.modulateRawBytes(synWire)
 
                 // Loop sending SYN until SYN_ACK received
-                audioController.startListening()
                 var receiverPubKeyBytes: ByteArray? = null
                 var attempts = 0
 
                 while (isActive && receiverPubKeyBytes == null && attempts < 10) {
+                    NativeDspBridge.clearRxBuffer()
                     audioController.playAudio(synAudio)
                     attempts++
 
-                    // Listen for SYN_ACK response
+                    // Flush own speaker playback echo from rx ring buffer
+                    delay(100)
+                    NativeDspBridge.clearRxBuffer()
+
+                    // Listen for SYN_ACK response (transmitting SYN_ACK takes ~6s over audio)
                     val waitStart = System.currentTimeMillis()
-                    while (System.currentTimeMillis() - waitStart < 2500) {
-                        val packet = NativeDspBridge.pollDecodedPacket(ProtocolConstants.MAX_WIRE_PACKET_SIZE)
+                    while (System.currentTimeMillis() - waitStart < 8500 && receiverPubKeyBytes == null && isActive) {
+                        val packet = NativeDspBridge.pollDecodedPacket(0)
                         if (packet != null && packet.packetType == PacketType.SYN_ACK && packet.sessionId == sessionId) {
                             receiverPubKeyBytes = packet.payload
                             break
@@ -147,7 +157,7 @@ class TransferManager(
                 }
 
                 if (receiverPubKeyBytes == null) {
-                    throw IllegalStateException("Receiver did not respond. Check distance and audio volume.")
+                    throw IllegalStateException("Receiver did not respond. Check volume is high (80%+) and devices are close (5-30 cm).")
                 }
 
                 // 4. Derive Shared Session Key
@@ -163,10 +173,15 @@ class TransferManager(
                     delay(100)
                 }
 
+                delay(200)
+                NativeDspBridge.clearRxBuffer()
+
                 // Transmit AUTH confirmation packet
                 val authWire = NativeDspBridge.encodePacket(PacketType.AUTH, sessionId, 1, "OK".toByteArray())
                 val authAudio = NativeDspBridge.modulateRawBytes(authWire)
                 audioController.playAudio(authAudio)
+                delay(200)
+                NativeDspBridge.clearRxBuffer()
 
                 // 6. Transmit Encrypted Metadata
                 val sha256 = SonicCrypto.computeSha256(fileBytes)
@@ -177,10 +192,11 @@ class TransferManager(
                 val metaWire = NativeDspBridge.encodePacket(PacketType.METADATA, sessionId, 2, encMeta)
                 val metaAudio = NativeDspBridge.modulateRawBytes(metaWire)
                 audioController.playAudio(metaAudio)
-                delay(200)
+                delay(250)
+                NativeDspBridge.clearRxBuffer()
 
                 // 7. Chunk and Transmit Data Packets
-                val chunkSize = 64 // 64 bytes per payload for optimal ultrasonic air reliability
+                val chunkSize = 64 // 64 bytes per payload for optimal acoustic reliability
                 val totalChunks = ((fileBytes.size + chunkSize - 1) / chunkSize)
                 var bytesSent = 0L
                 val startTime = System.currentTimeMillis()
@@ -215,10 +231,11 @@ class TransferManager(
                         snrDb = audioController.currentSnr.value
                     )
 
-                    delay(30)
+                    delay(60) // Acoustic settling delay between consecutive frames
                 }
 
                 // 8. Transmit FIN
+                delay(150)
                 val finWire = NativeDspBridge.encodePacket(PacketType.FIN, sessionId, 9999, "FIN".toByteArray())
                 val finAudio = NativeDspBridge.modulateRawBytes(finWire)
                 audioController.playAudio(finAudio)
@@ -265,7 +282,7 @@ class TransferManager(
                 // 1. Listen for SYN
                 var synPacket: Packet? = null
                 while (isActive && synPacket == null) {
-                    val p = NativeDspBridge.pollDecodedPacket(ProtocolConstants.MAX_WIRE_PACKET_SIZE)
+                    val p = NativeDspBridge.pollDecodedPacket(0)
                     if (p != null && p.packetType == PacketType.SYN) {
                         synPacket = p
                         break
@@ -277,13 +294,21 @@ class TransferManager(
                 sessionId = synPacket.sessionId
                 _phase.value = TransferPhase.KeyExchange
 
+                // Brief pause so sender speaker stops completely
+                delay(250)
+
                 // 2. Respond with SYN_ACK
                 localKeyPair = SonicCrypto.generateEphemeralKeyPair()
                 val localPubBytes = localKeyPair!!.public.encoded
 
                 val synAckWire = NativeDspBridge.encodePacket(PacketType.SYN_ACK, sessionId, 0, localPubBytes)
                 val synAckAudio = NativeDspBridge.modulateRawBytes(synAckWire)
+                NativeDspBridge.clearRxBuffer()
                 audioController.playAudio(synAckAudio)
+
+                // Clear self-hearing echo recorded while speaker was playing
+                delay(150)
+                NativeDspBridge.clearRxBuffer()
 
                 // 3. Derive Shared Session Key
                 val sharedSecret = SonicCrypto.computeSharedSecret(localKeyPair!!, remotePubBytes)
@@ -297,25 +322,30 @@ class TransferManager(
                     delay(100)
                 }
 
+                delay(200)
+                NativeDspBridge.clearRxBuffer()
+
                 // 5. Receive File Metadata
                 var fileName = "downloaded_file"
                 var totalFileSize = 0L
                 var expectedSha256 = ""
 
                 while (isActive) {
-                    val p = NativeDspBridge.pollDecodedPacket(ProtocolConstants.MAX_WIRE_PACKET_SIZE)
-                    if (p != null && p.packetType == PacketType.METADATA && p.sessionId == sessionId) {
-                        val nonce = SonicCrypto.constructNonce(sessionId, p.sequenceNum, isSender = true)
-                        val decMeta = SonicCrypto.decryptPayload(sessionKey!!, nonce, p.payload)
-                        val metaParts = String(decMeta).split("|")
-                        if (metaParts.size >= 3) {
-                            fileName = metaParts[0]
-                            totalFileSize = metaParts[1].toLongOrNull() ?: 0L
-                            expectedSha256 = metaParts[2]
-                            break
+                    val p = NativeDspBridge.pollDecodedPacket(0)
+                    if (p != null && p.sessionId == sessionId) {
+                        if (p.packetType == PacketType.METADATA) {
+                            val nonce = SonicCrypto.constructNonce(sessionId, p.sequenceNum, isSender = true)
+                            val decMeta = SonicCrypto.decryptPayload(sessionKey!!, nonce, p.payload)
+                            val metaParts = String(decMeta).split("|")
+                            if (metaParts.size >= 3) {
+                                fileName = metaParts[0]
+                                totalFileSize = metaParts[1].toLongOrNull() ?: 0L
+                                expectedSha256 = metaParts[2]
+                                break
+                            }
                         }
                     }
-                    delay(50)
+                    delay(40)
                 }
 
                 // 6. Receive and Decrypt File Chunks
@@ -324,7 +354,7 @@ class TransferManager(
                 var isCompleted = false
 
                 while (isActive && !isCompleted) {
-                    val p = NativeDspBridge.pollDecodedPacket(ProtocolConstants.MAX_WIRE_PACKET_SIZE)
+                    val p = NativeDspBridge.pollDecodedPacket(0)
                     if (p != null && p.sessionId == sessionId) {
                         if (p.packetType == PacketType.DATA) {
                             val nonce = SonicCrypto.constructNonce(sessionId, p.sequenceNum, isSender = true)

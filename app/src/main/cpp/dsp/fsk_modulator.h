@@ -17,11 +17,11 @@ namespace dsp {
 struct FskConfig {
     int sampleRate = 48000;
     
-    // Frequencies in Hz
-    float markFrequency = 18500.0f;    // Binary 1
-    float spaceFrequency = 19500.0f;   // Binary 0
-    float preambleFreq1 = 17500.0f;    // Preamble tone 1 (start tone)
-    float preambleFreq2 = 20500.0f;    // Preamble tone 2 (sync tone)
+    // Frequencies in Hz (17.4 kHz - 19.2 kHz, strictly within smartphone transducer response)
+    float markFrequency = 18600.0f;    // Binary 1
+    float spaceFrequency = 19200.0f;   // Binary 0
+    float preambleFreq1 = 17400.0f;    // Preamble tone 1 (start tone)
+    float preambleFreq2 = 18000.0f;    // Preamble tone 2 (sync tone)
     
     // Timing parameters
     float symbolDurationMs = 10.0f;    // 10ms per symbol = 100 baud

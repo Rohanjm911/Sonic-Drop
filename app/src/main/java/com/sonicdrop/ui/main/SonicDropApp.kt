@@ -207,11 +207,28 @@ fun HomeScreen(
     val isListening by audioController.isListening.collectAsStateWithLifecycle()
     val history by historyRepository.records.collectAsStateWithLifecycle()
 
+    var pendingSendUri by remember { mutableStateOf<Uri?>(null) }
+
+    val senderPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val uri = pendingSendUri
+        if (granted && uri != null) {
+            transferManager.startSending(uri)
+        }
+        pendingSendUri = null
+    }
+
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            transferManager.startSending(uri)
+            if (audioController.hasRecordPermission()) {
+                transferManager.startSending(uri)
+            } else {
+                pendingSendUri = uri
+                senderPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+            }
         }
     }
 
